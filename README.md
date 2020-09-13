@@ -10,7 +10,8 @@ Calculate Euclidean distance between the boxes to check for humans that are too 
 3. Create virtual env
 4. Pip install requirements-gpu.txt
 5. Run save_model.py to convert yolov4.weight darknet file to tensorflow pb files
-6. Run detectvideo.py:
+6. Edit draw_bbox function in utils.py to ensure only humans are detected
+7. Run detectvideo.py:
 python detectvideo.py --weights ./checkpoints/yolov4-416 --size 416 --model yolov4 --video ./data/pedestrians.mp4
 
 
