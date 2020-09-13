@@ -1,3 +1,19 @@
+# Additions made to this repo
+
+## Objective
+To create a social distancing detector using Yolo v4 detector to detect humans. 
+Calculate Euclidean distance between the boxes to check for humans that are too close to each other.
+
+## Quick fixes made to work on windows
+1. Download yolov4 weight
+2. Added gitignore file to ignore env folder
+3. Create virtual env
+4. Pip install requirements-gpu.txt
+5. Run save_model.py to convert yolov4.weight darknet file to tensorflow pb files
+6. Run detectvideo.py:
+python detectvideo.py --weights ./checkpoints/yolov4-416 --size 416 --model yolov4 --video ./data/pedestrians.mp4
+
+
 # tensorflow-yolov4-tflite
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
 
