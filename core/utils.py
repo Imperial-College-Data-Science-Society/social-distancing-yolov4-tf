@@ -136,6 +136,7 @@ def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_la
     random.seed(None)
 
     out_boxes, out_scores, out_classes, num_boxes = bboxes
+    bottom_centre_coords = []
     for i in range(num_boxes[0]):
         if int(out_classes[0][i]) != 0: continue
         coor = out_boxes[0][i]
@@ -143,6 +144,9 @@ def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_la
         coor[2] = int(coor[2] * image_h)
         coor[1] = int(coor[1] * image_w)
         coor[3] = int(coor[3] * image_w)
+
+        bottom_centre_coord = (int((coor[3]-coor[1])//2 + coor[1]), int(coor[2]))
+        bottom_centre_coords.append(bottom_centre_coord)
 
         fontScale = 0.5
         score = out_scores[0][i]
@@ -157,10 +161,10 @@ def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_la
             t_size = cv2.getTextSize(bbox_mess, 0, fontScale, thickness=bbox_thick // 2)[0]
             c3 = (c1[0] + t_size[0], c1[1] - t_size[1] - 3)
             cv2.rectangle(image, c1, (np.float32(c3[0]), np.float32(c3[1])), bbox_color, -1) #filled
-
+            cv2.circle(image, bottom_centre_coord, 10, bbox_color, -1)
             cv2.putText(image, bbox_mess, (c1[0], np.float32(c1[1] - 2)), cv2.FONT_HERSHEY_SIMPLEX,
                         fontScale, (0, 0, 0), bbox_thick // 2, lineType=cv2.LINE_AA)
-    return image
+    return image, bottom_centre_coords
 
 def bbox_iou(bboxes1, bboxes2):
     """
