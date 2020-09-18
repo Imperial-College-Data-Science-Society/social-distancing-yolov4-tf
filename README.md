@@ -13,7 +13,8 @@ Calculate Euclidean distance between the boxes to check for humans that are too 
 6. Edit draw_bbox function in utils.py to ensure only humans are detected
 7. Run detectvideo.py:
 python detectvideo.py --weights ./checkpoints/yolov4-416 --size 416 --model yolov4 --video ./data/pedestrians.mp4
-
+8. Run Social Distancing Detector:
+python social_distancing.py -o1 test.avi -o2 test2.avi -m ./checkpoints/yolov4-416 -d True -i ./data/pedestrians.mp4
 
 # tensorflow-yolov4-tflite
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
