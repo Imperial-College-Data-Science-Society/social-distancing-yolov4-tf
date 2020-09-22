@@ -2,19 +2,28 @@
 
 ## Objective
 To create a social distancing detector using Yolo v4 detector to detect humans. 
-Calculate Euclidean distance between the boxes to check for humans that are too close to each other.
+Get a bird's eye view of the location and map humans detected by yolov4 onto it. Then, calculate Euclidean distance between the points to check for humans that are too close to each other.
+![Alt text](img\diagram.png?raw=true "Diagram")
 
 ## Quick fixes made to work on windows
 1. Download yolov4 weight
+
 2. Added gitignore file to ignore env folder
+
 3. Create virtual env
+
 4. Pip install requirements-gpu.txt
-5. Run save_model.py to convert yolov4.weight darknet file to tensorflow pb files
+
+5. Run save_model.py to convert yolov4.weight darknet file to tensorflow pb files:
+python save_model.py --weights ./data/yolov4.weights --output ./checkpoints/yolov4-416 --input_size 416 --model yolov4 
+
 6. Edit draw_bbox function in utils.py to ensure only humans are detected
-7. Run detectvideo.py:
+
+7. Run detectvideo.py to see how yolov4 does object detection:
 python detectvideo.py --weights ./checkpoints/yolov4-416 --size 416 --model yolov4 --video ./data/pedestrians.mp4
+
 8. Run Social Distancing Detector:
-python social_distancing.py -o1 test.avi -o2 test2.avi -m ./checkpoints/yolov4-416 -d True -i ./data/pedestrians.mp4
+python social_distancing.py -m ./checkpoints/yolov4-416 -d True -i ./data/pedestrians.mp4  -oc detections_camera_view.avi -ob detections_birds_eye_view.avi
 
 # tensorflow-yolov4-tflite
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)

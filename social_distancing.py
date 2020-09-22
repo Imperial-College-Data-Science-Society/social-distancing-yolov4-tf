@@ -37,13 +37,28 @@ def get_mouse_points(event, x, y, flags, param):
         print("Point detected")
         print(mouse_pts)
 
+def get_bev_mat(region_of_interest)
+    rect = np.array(region_of_interest, dtype = "float32")
+    (tl, tr, br, bl) = rect
+    widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+    widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+    maxWidth = max(int(widthA), int(widthB))
+    heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+    heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+    maxHeight = max(int(heightA), int(heightB))
+    dst = np.array([[0, 0],
+                    [maxWidth - 1, 0],
+                    [maxWidth - 1, maxHeight - 1],
+                    [0, maxHeight - 1]], dtype = "float32")
+    return cv2.getPerspectiveTransform(rect, dst)
+
 if __name__== "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("-i", "--input", type=str, default="",
         help="path to (optional) input video file")
-    ap.add_argument("-o1", "--output_human", type=str, default="",
+    ap.add_argument("-oc", "--output_camera", type=str, default="",
         help="path to (optional) output video file")
-    ap.add_argument("-o2", "--output_bev", type=str, default="",
+    ap.add_argument("-ob", "--output_bev", type=str, default="",
         help="path to (optional) output video file")
     ap.add_argument("-m", "--model", type=str, default=1,
         help="path to output video file")
@@ -55,34 +70,39 @@ if __name__== "__main__":
     config = ConfigProto()
     config.gpu_options.allow_growth = True
     session = InteractiveSession(config=config)
-
     saved_model_loaded = tf.saved_model.load(args.model, tags=[tag_constants.SERVING])
     infer = saved_model_loaded.signatures['serving_default']
-
     print('yolov4 model loaded')
 
     vid = cv2.VideoCapture(args.input)
-    if args.output_human:
-        # by default VideoCapture returns float instead of int
+
+    #Output human detection from camera POV to video
+    if args.output_camera:
         width = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = int(vid.get(cv2.CAP_PROP_FPS))
         codec = cv2.VideoWriter_fourcc(*'MJPG')
-        out = cv2.VideoWriter(args.output_human, codec, fps, (width, height))
+        out = cv2.VideoWriter(args.output_camera, codec, fps, (width, height))
 
     frame_id = 0 
     while True:
         return_value, frame = vid.read()
+
+        #Check if next frame is available
         if return_value:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            # image = Image.fromarray(frame)
         else:
             if frame_id == vid.get(cv2.CAP_PROP_FRAME_COUNT):
                 print("Video processing complete")
                 break
             raise ValueError("No image! Try with another video format")
-        if frame_id == 0:
+
+        #Get region of interest from the first frame
+        frame_id += 1
+        if frame_id == 1:
             cv2.namedWindow("image", cv2.WINDOW_NORMAL)
+
+            #Get region of interest from the first 4 mouse clicks
             cv2.setMouseCallback("image", get_mouse_points)
             image = frame
             while True:
@@ -91,42 +111,31 @@ if __name__== "__main__":
                 if len(mouse_pts) == 7:
                     cv2.destroyWindow("image")
                     break
-            rect = np.array(mouse_pts[:4], dtype = "float32")
-            (tl, tr, br, bl) = rect
-            print(tl, tr, br, bl)
-            widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-            widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-            maxWidth = max(int(widthA), int(widthB))
-            heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-            heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-            maxHeight = max(int(heightA), int(heightB))
-            dst = np.array([
-                [0, 0],
-                [maxWidth - 1, 0],
-                [maxWidth - 1, maxHeight - 1],
-                [0, maxHeight - 1]], dtype = "float32")
-            M = cv2.getPerspectiveTransform(rect, dst)
 
+            #Get Perspective Transform from the 4 points
+            M = get_bev_mat(mouse_pts[:4])
+
+            #The next two mouse clicks is meant to indicate the distance threshold. 
+            #Warp them based on the matrix calculated before.
             pts = np.float32(np.array([mouse_pts[4:7]]))
             warped_pts = cv2.perspectiveTransform(pts, M)
             warped_pt = warped_pts[0]
             distance_thresh = np.sqrt((warped_pt[0][0] - warped_pt[1][0]) ** 2 + (warped_pt[0][1] - warped_pt[1][1]) ** 2)
-            # distance_h = np.sqrt((warped_pt[0][0] - warped_pt[2][0]) ** 2 + (warped_pt[0][1] - warped_pt[2][1]) ** 2)
             print(distance_thresh)
             cv2.namedWindow("warped", cv2.WINDOW_NORMAL)    
             warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
             cv2.imshow("warped", warped)
             cv2.waitKey(0)
             cv2.destroyWindow("image") 
-            frame_id += 1
 
+            #Output human detection from Bird's Eye View POV to video
             if args.output_bev:
-                # by default VideoCapture returns float instead of int
                 birdseyeview_fps = int(vid.get(cv2.CAP_PROP_FPS))
                 birdseyeview_codec = cv2.VideoWriter_fourcc(*'MJPG')
                 birdseyeview = cv2.VideoWriter(args.output_bev, birdseyeview_codec, birdseyeview_fps, (maxWidth, maxHeight))
+        
         else:
-            
+            #For the remaining frames of the video warp them based on the matrix
             warped = cv2.warpPerspective(frame, M, (maxWidth, maxHeight))
             
             input_size = 416
@@ -136,12 +145,14 @@ if __name__== "__main__":
             image_data = image_data[np.newaxis, ...].astype(np.float32)
             prev_time = time.time()
 
+            #Put original frames through the object detection model and get bounding boxes and confidence
             batch_data = tf.constant(image_data)
             pred_bbox = infer(batch_data)
             for key, value in pred_bbox.items():
                 boxes = value[:, :, 0:4]
                 pred_conf = value[:, :, 4:]
 
+            #Non Max Suppression to get fewer bounding boxes
             boxes, scores, classes, valid_detections = tf.image.combined_non_max_suppression(
                 boxes=tf.reshape(boxes, (tf.shape(boxes)[0], -1, 1, 4)),
                 scores=tf.reshape(
@@ -151,12 +162,14 @@ if __name__== "__main__":
                 iou_threshold=0.45,
                 score_threshold=0.25
             )
-            pred_bbox = [boxes.numpy(), scores.numpy(), classes.numpy(), valid_detections.numpy()]
-            
-            image_h, image_w = frame_size
 
+            #Loop through bounding boxes
+            pred_bbox = [boxes.numpy(), scores.numpy(), classes.numpy(), valid_detections.numpy()]
             out_boxes, out_scores, out_classes, num_boxes = pred_bbox
-            bottom_centre_coords = []
+            image_h, image_w = frame_size
+            
+            #Create dictionary of bottom centre coords as keys and top left and bottom right coords as values
+            coords = {}
 
             for i in range(num_boxes[0]):
                 if int(out_classes[0][i]) != 0: continue
@@ -166,72 +179,68 @@ if __name__== "__main__":
                 coor[1] = int(coor[1] * image_w)
                 coor[3] = int(coor[3] * image_w)
 
+                #Top Left of bbox, Bottom Right of bbox
                 c1, c2 = (coor[1], coor[0]), (coor[3], coor[2])
-
-                bottom_centre_coord = [(int((coor[3]-coor[1])//2 + coor[1]), int(coor[2])), c1, c2]
-                bottom_centre_coords.append(bottom_centre_coord)
-
-
-            # image, bottom_coords = utils.draw_bbox(frame, pred_bbox)
-            curr_time = time.time()
-            exec_time = curr_time - prev_time
-            result = np.asarray(image)
-            info = "time: %.2f ms" %(1000*exec_time)
-            print(info)
-
-            test = {}
-
-            print(bottom_centre_coords)
-            for i in bottom_centre_coords:
-                bottom_coords_pts = np.float32(np.array([[i[0]]]))
-                warped_bottom_pts = cv2.perspectiveTransform(bottom_coords_pts, M)[0]
-                print(warped_bottom_pts)
-                warped_coords = (warped_bottom_pts[0][0].astype(int), warped_bottom_pts[0][1].astype(int))
-                test[warped_coords] = (i[1], i[2])
+                #Bottom centre of the bbox
+                bottom_centre = (int((coor[3]-coor[1])//2 + coor[1]), int(coor[2]))
                 
-            print(test)
-            comb = combinations(test.keys(), 2) 
+                bottom_coords_pts = np.float32(np.array([[bottom_centre]]))
+                warped_bottom_pts = cv2.perspectiveTransform(bottom_coords_pts, M)[0]
+                # print(warped_bottom_pts)
+                warped_coords = (warped_bottom_pts[0][0].astype(int), warped_bottom_pts[0][1].astype(int))
+                coords[warped_coords] = (c1, c2)
+            
+            #Create a list of all the possible pairs of bottom centre coords
+            possible_pairs = combinations(coords.keys(), 2) 
             violate = set()
-
-            for i in comb:
-                print(i)
+            red_color = (255, 0, 0)
+            green_color = ( 0, 255, 0)
+            for i in possible_pairs:
                 dist = math.hypot(abs(i[0][0] - i[1][0]),abs(i[0][1] - i[1][1]))
-                print(dist)
                 if dist < distance_thresh:
                     violate.add(i[0])
                     violate.add(i[1])
-                    color = (0, 0, 255)
-                    cv2.circle(warped, i[0], 20, color, 2)
-                    cv2.circle(warped, i[1], 20, color, 2)
+                    
+                    cv2.circle(warped, i[0], 20, red_color, 2)
+                    cv2.circle(warped, i[1], 20, red_color, 2)
                     cv2.line(warped, i[0], i[1], (70, 70, 70), 2)
                     
-                    # text_coord = (int(min(i[0][0],i[1][0])+(abs(i[0][0] - i[1][0]) // 2)), int(min(i[0][1],i[1][1])+(abs(i[0][1] - i[1][1])// 2)))
-                    # cv2.putText(warped, str(dist), text_coord, cv2.FONT_HERSHEY_SIMPLEX,
-                    #     0.5, color, 1, lineType=cv2.LINE_AA)
+                    text_coord = (int(min(i[0][0],i[1][0])+(abs(i[0][0] - i[1][0]) // 2)), int(min(i[0][1],i[1][1])+(abs(i[0][1] - i[1][1])// 2)))
+                    cv2.putText(warped, 
+                                str(dist),
+                                text_coord, 
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.5, 
+                                red_color, 
+                                1, 
+                                lineType=cv2.LINE_AA)
                     
-            for i in test.keys():
-                color = (0, 0, 255)
-                if i not in list(violate):
-                    color = ( 0, 255, 0)
-                    cv2.circle(warped, i, 20, color, 2)
-                    
-                c1, c2 = test[i]
+            for i in coords.keys():
+                c1, c2 = coords[i]
                 bbox_thick = int(0.6 * (image_h + image_w) / 600)
-                cv2.rectangle(image, c1, c2, color, bbox_thick)
+                if i not in list(violate):
+                    cv2.circle(warped, i, 20, green_color, 2)
+                    cv2.rectangle(frame, c1, c2, green_color, bbox_thick)
+                else:
+                    cv2.rectangle(frame, c1, c2, red_color, bbox_thick)
 
-            result = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            camera_angle = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            birdeyeview = cv2.cvtColor(warped, cv2.COLOR_RGB2BGR)
+            curr_time = time.time()
+            exec_time = curr_time - prev_time
+            info = "time: %.2f ms" %(1000*exec_time)
+            print(info)
 
             if args.display == 'True':
                 cv2.namedWindow("image", cv2.WINDOW_NORMAL)    
-                cv2.imshow("image", warped)
+                cv2.imshow("image", birdeyeview)
 
                 cv2.namedWindow("result", cv2.WINDOW_NORMAL)
-                cv2.imshow("result", result)
+                cv2.imshow("result", camera_angle)
                 if cv2.waitKey(1) & 0xFF == ord('q'): break
 
-            if args.output_human:
-                out.write(result)
+            if args.output_camera:
+                out.write(camera_angle)
             if args.output_bev:
-                birdseyeview.write(warped)
+                birdseyeview.write(birdeyeview)
                 
-            frame_id += 1
