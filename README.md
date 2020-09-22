@@ -5,7 +5,7 @@ To create a social distancing detector using Yolo v4 detector to detect humans.
 Get a bird's eye view of the location and map humans detected by yolov4 onto it. Then, calculate Euclidean distance between the points to check for humans that are too close to each other.
 ![alt text](https://github.com/sytan98/social-distancing-yolov4-tf/blob/master/img/diagram.png?raw=true)
 
-## Quick fixes made to work on windows
+## How to Use
 1. Download yolov4 weight
 
 2. Added gitignore file to ignore env folder
