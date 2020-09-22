@@ -84,11 +84,11 @@ if __name__== "__main__":
         if frame_id == 0:
             cv2.namedWindow("image", cv2.WINDOW_NORMAL)
             cv2.setMouseCallback("image", get_mouse_points)
-            image = cv2.imread("result1.png")
+            image = frame
             while True:
                 cv2.imshow("image", image)
                 cv2.waitKey(1)
-                if len(mouse_pts) == 6:
+                if len(mouse_pts) == 7:
                     cv2.destroyWindow("image")
                     break
             rect = np.array(mouse_pts[:4], dtype = "float32")
@@ -113,6 +113,10 @@ if __name__== "__main__":
             distance_thresh = np.sqrt((warped_pt[0][0] - warped_pt[1][0]) ** 2 + (warped_pt[0][1] - warped_pt[1][1]) ** 2)
             # distance_h = np.sqrt((warped_pt[0][0] - warped_pt[2][0]) ** 2 + (warped_pt[0][1] - warped_pt[2][1]) ** 2)
             print(distance_thresh)
+            cv2.namedWindow("warped", cv2.WINDOW_NORMAL)    
+            warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
+            cv2.imshow("warped", warped)
+            cv2.waitKey(0)
             cv2.destroyWindow("image") 
             frame_id += 1
 
@@ -148,35 +152,72 @@ if __name__== "__main__":
                 score_threshold=0.25
             )
             pred_bbox = [boxes.numpy(), scores.numpy(), classes.numpy(), valid_detections.numpy()]
-            image, bottom_coords = utils.draw_bbox(frame, pred_bbox)
+            
+            image_h, image_w = frame_size
+
+            out_boxes, out_scores, out_classes, num_boxes = pred_bbox
+            bottom_centre_coords = []
+
+            for i in range(num_boxes[0]):
+                if int(out_classes[0][i]) != 0: continue
+                coor = out_boxes[0][i]
+                coor[0] = int(coor[0] * image_h)
+                coor[2] = int(coor[2] * image_h)
+                coor[1] = int(coor[1] * image_w)
+                coor[3] = int(coor[3] * image_w)
+
+                c1, c2 = (coor[1], coor[0]), (coor[3], coor[2])
+
+                bottom_centre_coord = [(int((coor[3]-coor[1])//2 + coor[1]), int(coor[2])), c1, c2]
+                bottom_centre_coords.append(bottom_centre_coord)
+
+
+            # image, bottom_coords = utils.draw_bbox(frame, pred_bbox)
             curr_time = time.time()
             exec_time = curr_time - prev_time
             result = np.asarray(image)
             info = "time: %.2f ms" %(1000*exec_time)
             print(info)
 
-            bottom_coords_pts = np.float32(np.array([bottom_coords]))
-            warped_bottom_pts = cv2.perspectiveTransform(bottom_coords_pts, M)
-            comb = combinations(warped_bottom_pts[0], 2) 
-            violate = set()
-            for i in comb:
-                dist = math.hypot(abs(i[0][0] - i[1][0]),abs(i[0][1] - i[1][1]))
-                if dist < distance_thresh:
-                    violate.add(tuple(i[0].astype(int)))
-                    violate.add(tuple(i[1].astype(int)))
-                    color = (0, 0, 255)
-                    cv2.circle(warped, tuple(i[0].astype(int)), 20, color, 2)
-                    cv2.circle(warped, tuple(i[1].astype(int)), 20, color, 2)
-                    cv2.line(warped, tuple(i[0].astype(int)), tuple(i[1].astype(int)), (70, 70, 70), 2)
-                    
-                    text_coord = (int(min(i[0][0],i[1][0])+(abs(i[0][0] - i[1][0]) // 2)), int(min(i[0][1],i[1][1])+(abs(i[0][1] - i[1][1])// 2)))
-                    cv2.putText(warped, str(dist), text_coord, cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5, color, 1, lineType=cv2.LINE_AA)
+            test = {}
 
-            for i in warped_bottom_pts[0]:
-                color = ( 0, 255, 0)
-                if tuple(i.astype(int)) not in list(violate):
-                    cv2.circle(warped, tuple(i.astype(int)), 20, color, 2)
+            print(bottom_centre_coords)
+            for i in bottom_centre_coords:
+                bottom_coords_pts = np.float32(np.array([[i[0]]]))
+                warped_bottom_pts = cv2.perspectiveTransform(bottom_coords_pts, M)[0]
+                print(warped_bottom_pts)
+                warped_coords = (warped_bottom_pts[0][0].astype(int), warped_bottom_pts[0][1].astype(int))
+                test[warped_coords] = (i[1], i[2])
+                
+            print(test)
+            comb = combinations(test.keys(), 2) 
+            violate = set()
+
+            for i in comb:
+                print(i)
+                dist = math.hypot(abs(i[0][0] - i[1][0]),abs(i[0][1] - i[1][1]))
+                print(dist)
+                if dist < distance_thresh:
+                    violate.add(i[0])
+                    violate.add(i[1])
+                    color = (0, 0, 255)
+                    cv2.circle(warped, i[0], 20, color, 2)
+                    cv2.circle(warped, i[1], 20, color, 2)
+                    cv2.line(warped, i[0], i[1], (70, 70, 70), 2)
+                    
+                    # text_coord = (int(min(i[0][0],i[1][0])+(abs(i[0][0] - i[1][0]) // 2)), int(min(i[0][1],i[1][1])+(abs(i[0][1] - i[1][1])// 2)))
+                    # cv2.putText(warped, str(dist), text_coord, cv2.FONT_HERSHEY_SIMPLEX,
+                    #     0.5, color, 1, lineType=cv2.LINE_AA)
+                    
+            for i in test.keys():
+                color = (0, 0, 255)
+                if i not in list(violate):
+                    color = ( 0, 255, 0)
+                    cv2.circle(warped, i, 20, color, 2)
+                    
+                c1, c2 = test[i]
+                bbox_thick = int(0.6 * (image_h + image_w) / 600)
+                cv2.rectangle(image, c1, c2, color, bbox_thick)
 
             result = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
@@ -192,4 +233,5 @@ if __name__== "__main__":
                 out.write(result)
             if args.output_bev:
                 birdseyeview.write(warped)
+                
             frame_id += 1
